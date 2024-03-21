@@ -3,7 +3,7 @@ package timewheel
 import "time"
 
 // oneTimeUnit 为一个时间单元
-var oneTimeUnit = time.Millisecond * 100
+var oneTimeUnit = time.Millisecond * 200
 
 var tw = NewTimeWheel(oneTimeUnit, 3600)
 

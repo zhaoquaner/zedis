@@ -312,7 +312,7 @@ func (c *ConcurrentDict) decreaseCount() int32 {
 
 func (c *ConcurrentDict) toLockIndices(keys []string, reverse bool) []uint32 {
 	indexMap := make(map[uint32]struct{})
-	// 为了去重
+	// 为了去重，mu是不可重入锁，防止多个key对应一个shard，造成锁等待卡死状态
 	for _, key := range keys {
 		index := c.spread(fnv32(key))
 		indexMap[index] = struct{}{}

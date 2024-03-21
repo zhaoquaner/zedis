@@ -257,15 +257,15 @@ func PTTLCommand(d *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	registerNormalCommand("exists", ExistsCommand, ReadAllKeys, -2, tagRead)
-	registerNormalCommand("del", DelCommand, WriteAllKeys, -2, tagWrite)
+	registerNormalCommand("exists", ExistsCommand, readAllKeys, -2, tagRead)
+	registerNormalCommand("del", DelCommand, writeAllKeys, -2, tagWrite)
 	registerNormalCommand("keys", KeysCommand, noPrepare, 2, tagRead)
-	registerNormalCommand("expire", ExpireCommand, WriteFirstKey, -3, tagWrite)
-	registerNormalCommand("expireat", ExpireAtCommand, WriteFirstKey, -3, tagWrite)
-	registerNormalCommand("pexpire", PExpireCommand, WriteFirstKey, -3, tagWrite)
-	registerNormalCommand("pexpireat", PExpireAtCommand, WriteFirstKey, -3, tagWrite)
-	registerNormalCommand("expiretime", ExpireTimeCommand, ReadFirstKey, 2, tagRead)
-	registerNormalCommand("pexpiretime", PExpireTimeCommand, ReadFirstKey, 2, tagRead)
-	registerNormalCommand("ttl", TTLCommand, ReadFirstKey, 2, tagRead)
-	registerNormalCommand("pttl", PTTLCommand, ReadFirstKey, 2, tagRead)
+	registerNormalCommand("expire", ExpireCommand, writeFirstKey, -3, tagWrite)
+	registerNormalCommand("expireat", ExpireAtCommand, writeFirstKey, -3, tagWrite)
+	registerNormalCommand("pexpire", PExpireCommand, writeFirstKey, -3, tagWrite)
+	registerNormalCommand("pexpireat", PExpireAtCommand, writeFirstKey, -3, tagWrite)
+	registerNormalCommand("expiretime", ExpireTimeCommand, readFirstKey, 2, tagRead)
+	registerNormalCommand("pexpiretime", PExpireTimeCommand, readFirstKey, 2, tagRead)
+	registerNormalCommand("ttl", TTLCommand, readFirstKey, 2, tagRead)
+	registerNormalCommand("pttl", PTTLCommand, readFirstKey, 2, tagRead)
 }

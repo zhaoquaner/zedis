@@ -71,12 +71,33 @@ func (d *DB) GetEntity(key string) (*db.DataEntity, bool) {
 	return entity, true
 }
 
+// PutEntity 不管key是不是已存在，都用新key-value覆盖或插入
+// 插入 返回1
+// 覆盖 返回0
 func (d *DB) PutEntity(key string, entity *db.DataEntity) int {
 	ret := d.data.Put(key, entity)
 	if cb := d.insertCallback; ret > 0 && cb != nil {
 		cb(0, key, entity)
 	}
 	return ret
+}
+
+// PutEntityIfNotExists 插入key-value键值对，如果key已存在，则不插入
+// 插入成功 返回1
+// 插入失败，返回0
+func (d *DB) PutEntityIfNotExists(key string, entity *db.DataEntity) int {
+	ret := d.data.PutIfAbsent(key, entity)
+	if cb := d.insertCallback; ret > 0 && cb != nil {
+		cb(0, key, entity)
+	}
+	return ret
+}
+
+// PutEntityIfExists 覆盖原有key-value；如果key不存在，则不覆盖和插入
+// 覆盖成功 返回1
+// 覆盖失败 返回0
+func (d *DB) PutEntityIfExists(key string, entity *db.DataEntity) int {
+	return d.data.PutIfExists(key, entity)
 }
 
 func (d *DB) Exists(key string) bool {
@@ -87,23 +108,13 @@ func (d *DB) Exists(key string) bool {
 	return false
 }
 
-func (d *DB) PutIfExists(key string, entity *db.DataEntity) int {
-	return d.data.PutIfExists(key, entity)
-}
-
-func (d *DB) PutIfAbsent(key string, entity *db.DataEntity) int {
-	ret := d.data.PutIfAbsent(key, entity)
-	if cb := d.insertCallback; ret > 0 && cb != nil {
-		cb(0, key, entity)
-	}
-	return ret
-}
-
 func (d *DB) Remove(key string) (*db.DataEntity, int) {
 	raw, deleted := d.data.Remove(key)
 	var entity *db.DataEntity
 	if deleted > 0 {
+		// 如果删除成功，则删除到期时间，等同于重置到期时间
 		entity = raw.(*db.DataEntity)
+		d.Persist(key)
 	}
 	if cb := d.deleteCallback; entity != nil && cb != nil {
 		cb(0, key, entity)

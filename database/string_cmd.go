@@ -120,12 +120,15 @@ func SetCommand(d *DB, cmdArgs [][]byte) redis.Reply {
 
 	switch policy {
 	case upsertPolicy:
-		d.PutEntity(key, entity)
+		if d.PutEntity(key, entity) == 0 {
+			d.Persist(key)
+		}
 		result = 1
 	case insertPolicy:
-		result = d.PutIfAbsent(key, entity)
+		result = d.PutEntityIfNotExists(key, entity)
 	case updatePolicy:
-		result = d.PutIfExists(key, entity)
+		result = d.PutEntityIfExists(key, entity)
+		d.Persist(key)
 	}
 
 	if result > 0 {
@@ -176,7 +179,7 @@ func AppendCommand(d *DB, args [][]byte) redis.Reply {
 		return err
 	}
 	if bytes == nil {
-		bytes = make([]byte, 0, len(valueBytes))
+		bytes = []byte("")
 	}
 	bytes = append(bytes, valueBytes...)
 	d.PutEntity(key, BuildStringEntity(bytes))
@@ -190,15 +193,18 @@ func MSetCommand(d *DB, args [][]byte) redis.Reply {
 	}
 
 	for i := 0; i < len(args); i += 2 {
-		key := args[i]
+		key := string(args[i])
 		val := args[i+1]
-		d.PutEntity(string(key), BuildStringEntity(val))
+		if d.PutEntity(key, BuildStringEntity(val)) == 0 {
+			// 如果覆盖掉原key，则到期时间重置
+			d.Persist(key)
+		}
 	}
 	return protocol.OKReplyConst
 }
 
-// MSetNxCommand 设置多个key-value键值对，只要有一个key已存在，就不执行任何操作，返回0;如果所有key都不存在，执行操作，返回1
-func MSetNxCommand(d *DB, args [][]byte) redis.Reply {
+// MSetNXCommand 设置多个key-value键值对，只要有一个key已存在，就不执行任何操作，返回0;如果所有key都不存在，执行操作，返回1
+func MSetNXCommand(d *DB, args [][]byte) redis.Reply {
 	if len(args)%2 != 0 {
 		return protocol.NewArgNumErrReply("msetex")
 	}
@@ -500,22 +506,22 @@ func GetRangeCommand(d *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	registerNormalCommand("set", SetCommand, WriteFirstKey, -3, tagWrite)
-	registerNormalCommand("get", GetCommand, ReadFirstKey, 2, tagRead)
-	registerNormalCommand("strlen", StrLenCommand, ReadFirstKey, 2, tagRead)
-	registerNormalCommand("append", AppendCommand, ReadFirstKey, 3, tagWrite)
-	registerNormalCommand("mset", MSetCommand, WriteAllKeys, -3, tagWrite)
-	registerNormalCommand("msetnx", MSetNxCommand, WriteAllKeys, -3, tagWrite)
-	registerNormalCommand("mget", MGetCommand, ReadAllKeys, -2, tagRead)
-	registerNormalCommand("getdel", GetDelCommand, WriteFirstKey, 2, tagWrite)
-	registerNormalCommand("incr", IncrCommand, WriteFirstKey, 2, tagWrite)
-	registerNormalCommand("decr", DecrCommand, WriteFirstKey, 2, tagWrite)
-	registerNormalCommand("incrby", IncrByCommand, WriteFirstKey, 3, tagWrite)
-	registerNormalCommand("decrby", DecrByCommand, WriteFirstKey, 3, tagWrite)
-	registerNormalCommand("getex", GetExCommand, ReadFirstKey, -2, tagRead)
-	registerNormalCommand("setrange", SetRangeCommand, WriteFirstKey, 4, tagWrite)
-	registerNormalCommand("getrange", GetRangeCommand, ReadFirstKey, 4, tagRead)
-	registerNormalCommand("incrbyfloat", IncrByFloatCommand, WriteFirstKey, 3, tagWrite)
+	registerNormalCommand("set", SetCommand, writeFirstKey, -3, tagWrite)
+	registerNormalCommand("get", GetCommand, readFirstKey, 2, tagRead)
+	registerNormalCommand("strlen", StrLenCommand, readFirstKey, 2, tagRead)
+	registerNormalCommand("append", AppendCommand, readFirstKey, 3, tagWrite)
+	registerNormalCommand("mset", MSetCommand, writeAllKeys, -3, tagWrite)
+	registerNormalCommand("msetnx", MSetNXCommand, writeAllKeys, -3, tagWrite)
+	registerNormalCommand("mget", MGetCommand, readAllKeys, -2, tagRead)
+	registerNormalCommand("getdel", GetDelCommand, writeFirstKey, 2, tagWrite)
+	registerNormalCommand("incr", IncrCommand, writeFirstKey, 2, tagWrite)
+	registerNormalCommand("decr", DecrCommand, writeFirstKey, 2, tagWrite)
+	registerNormalCommand("incrby", IncrByCommand, writeFirstKey, 3, tagWrite)
+	registerNormalCommand("decrby", DecrByCommand, writeFirstKey, 3, tagWrite)
+	registerNormalCommand("getex", GetExCommand, readFirstKey, -2, tagRead)
+	registerNormalCommand("setrange", SetRangeCommand, writeFirstKey, 4, tagWrite)
+	registerNormalCommand("getrange", GetRangeCommand, readFirstKey, 4, tagRead)
+	registerNormalCommand("incrbyfloat", IncrByFloatCommand, writeFirstKey, 3, tagWrite)
 
 	// GETSET Deprecated
 	// LCS 不会

@@ -85,14 +85,10 @@ func (s *SimpleDict) Keys() []string {
 	return result
 }
 
-// RandomKeys 随机返回给定数量的key
+// RandomKeys 随机返回给定数量的key，因为可以重复，所以limit可以比len(dict)大，无非就是有多个重复的key
 func (s *SimpleDict) RandomKeys(limit int) []string {
-	size := limit
-	if size > s.Len() {
-		size = s.Len()
-	}
-	result := make([]string, size)
-	for i := 0; i < size; i++ {
+	result := make([]string, limit)
+	for i := 0; i < limit; i++ {
 		for k := range s.m {
 			result[i] = k
 			break
@@ -101,6 +97,7 @@ func (s *SimpleDict) RandomKeys(limit int) []string {
 	return result
 }
 
+// RandomDistinctKeys 随机返回给定数量的无重复key，所以limit要比len(dict)小于或等于
 func (s *SimpleDict) RandomDistinctKeys(limit int) []string {
 	size := limit
 	if size > len(s.m) {
@@ -118,6 +115,7 @@ func (s *SimpleDict) RandomDistinctKeys(limit int) []string {
 	return result
 }
 
+// Clear 清空hash表
 func (s *SimpleDict) Clear() {
 	*s = *NewSimpleDict()
 }
