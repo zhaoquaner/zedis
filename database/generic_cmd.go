@@ -180,19 +180,19 @@ func setExpireTime(d *DB, key, expirePolicy string, oldExists bool, oldExpireTim
 		return protocol.NewIntReply(1)
 	case insertExpirePolicy:
 		if oldExists {
-			return protocol.ZeroReplyConst
+			return protocol.ZeroReply
 		}
 	case updateExpirePolicy:
 		if !oldExists {
-			return protocol.ZeroReplyConst
+			return protocol.ZeroReply
 		}
 	case greatThanExpirePolicy:
 		if !oldExists || !newExpireTime.After(oldExpireTime) {
-			return protocol.ZeroReplyConst
+			return protocol.ZeroReply
 		}
 	case lessThanExpirePolicy:
 		if !oldExists || !newExpireTime.Before(oldExpireTime) {
-			return protocol.ZeroReplyConst
+			return protocol.ZeroReply
 		}
 
 	}

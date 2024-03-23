@@ -40,10 +40,11 @@ func (d *DB) Exec(c redis.Connection, cmdName string, cmdArgs [][]byte) redis.Re
 
 	prepare := cmd.prepare
 	executor := cmd.executor
-
-	writeKeys, readKeys := prepare(cmdArgs)
-	d.RWLocks(writeKeys, readKeys)
-	defer d.RWUnLocks(writeKeys, readKeys)
+	if prepare != nil {
+		writeKeys, readKeys := prepare(cmdArgs)
+		d.RWLocks(writeKeys, readKeys)
+		defer d.RWUnLocks(writeKeys, readKeys)
+	}
 	return executor(d, cmdArgs)
 }
 

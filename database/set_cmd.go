@@ -58,7 +58,7 @@ func SMembersCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return protocol.EmptyMultiBulkReplyConst
+		return protocol.EmptyMultiBulkReply
 	}
 
 	members := make([][]byte, set.Len())
@@ -78,7 +78,7 @@ func SCardCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return protocol.ZeroReplyConst
+		return protocol.ZeroReply
 	}
 	return protocol.NewIntReply(int64(set.Len()))
 }
@@ -92,7 +92,7 @@ func SRemCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return protocol.ZeroReplyConst
+		return protocol.ZeroReply
 	}
 	deletedCount := 0
 	for i := 1; i < len(args); i++ {
@@ -280,7 +280,7 @@ func SIsMemberCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return protocol.ZeroReplyConst
+		return protocol.ZeroReply
 	}
 	var ret int64 = 0
 	if set.Contains(string(args[1])) {
@@ -332,7 +332,7 @@ func SMoveCommand(d *DB, args [][]byte) redis.Reply {
 	}
 
 	if sourceSet == nil || !sourceSet.Contains(member) {
-		return protocol.ZeroReplyConst
+		return protocol.ZeroReply
 	}
 
 	sourceSet.Remove(member)
@@ -373,7 +373,7 @@ func SRandMemberCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return protocol.NullBulkReplyConst
+		return protocol.NullBulkReply
 	}
 	members := set.RandomDistinctMembers(count)
 	memberBytes := make([][]byte, len(members))
@@ -410,7 +410,7 @@ func SPopCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return protocol.NullBulkReplyConst
+		return protocol.NullBulkReply
 	}
 	members := set.RandomDistinctMembers(count)
 	memberBytes := make([][]byte, len(members))

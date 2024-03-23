@@ -40,9 +40,9 @@ func NewUnknownCommandErrReply(cmdName string) *UnknownCommandErrReply {
 }
 
 var (
-	ErrorUnknownReply   = NewErrorReply("Err unknown")
-	ErrorWrongTypeReply = NewErrorReply("WRONGTYPE Operation against a key holding the wrong kind of value")
-	ErrorSyntaxReply    = NewErrorReply("Err syntax error")
-	// ErrorKeyNotExistsReply Key不存在也用这个错误
-	ErrorKeyNotExistsReply = ErrorWrongTypeReply
+	ErrorUnknownReply         = NewErrorReply("Err unknown")
+	ErrorWrongTypeReply       = NewErrorReply("WRONGTYPE Operation against a key holding the wrong kind of value")
+	ErrorSyntaxReply          = NewErrorReply("Err syntax error")
+	ErrorNoSuchKeyReply       = NewErrorReply("ERR no such key")
+	ErrorIndexOutOfRangeReply = NewErrorReply("ERR index out of range")
 )

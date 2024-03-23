@@ -21,4 +21,7 @@ type List interface {
 	Length() int                      // 返回列表长度
 	ForEach(consumer Consumer)        // 遍历元素
 	Contains(expected Expected) bool
+	RemoveByValFromHead(val []byte, count int) int // 从表头开始，删除count个值为val的元素，返回实际删除的元素个数
+	RemoveByValFromTail(val []byte, count int) int // 从表尾开始，删除count个值为val的元素，返回实际删除的元素个数
+	RemoveAllByVal(val []byte) int                 // 删除列表中所有值为val的元素，返回实际删除的元素个数
 }

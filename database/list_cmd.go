@@ -1,8 +1,10 @@
 package database
 
 import (
+	"errors"
 	"github.com/duke-git/lancet/v2/mathutil"
 	"strings"
+	"time"
 	"zedis/datastruct/list"
 	"zedis/interface/db"
 	"zedis/interface/redis"
@@ -59,7 +61,7 @@ func LPushXCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil {
-		return protocol.ZeroReplyConst
+		return protocol.ZeroReply
 	} else {
 		for _, arg := range args[1:] {
 			l.AddFirst(arg)
@@ -100,7 +102,7 @@ func RPushXCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil {
-		return protocol.ZeroReplyConst
+		return protocol.ZeroReply
 	} else {
 		for _, arg := range args[1:] {
 			l.AddLast(arg)
@@ -132,7 +134,7 @@ func LPopCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil {
-		return protocol.NullBulkReplyConst
+		return protocol.NullBulkReply
 	}
 	if l.Length() < count {
 		count = l.Length()
@@ -145,6 +147,93 @@ func LPopCommand(d *DB, args [][]byte) redis.Reply {
 		d.Remove(key)
 	}
 	return protocol.NewMultiBulkReply(values)
+}
+
+type KeyValue struct {
+	key   []byte
+	value []byte
+}
+
+// BLPopCommand 从第一个非空列表的表头弹出元素，并返回一个数组，第一个元素是非空的key，第二个是弹出的元素值；如果所有key都不存在，则阻塞该客户端的连接
+// 直到某一个key对应list插入了元素；最后一个参数指定以秒为单位的超时时间，如果是0，则表示不设置超时时间
+// BLPOP key [key ...] timeout
+func BLPopCommand(d *DB, args [][]byte) redis.Reply {
+	timeout, err := parseInt(args[len(args)-1])
+	if err != nil {
+		return protocol.NewErrorReply("ERR timeout is not an integer or out of range")
+	}
+	if timeout < 0 {
+		return protocol.NewErrorReply("ERR timeout is negative")
+	}
+
+	numKeys := len(args) - 1
+	keys := make([]string, 0)
+	for i := 0; i < numKeys; i++ {
+		key := string(args[i])
+		l, errReply := d.getEntityAsList(key)
+		if errReply != nil {
+			return errReply
+		}
+		if l != nil {
+			val := l.RemoveFirst()
+			if l.Length() == 0 {
+				d.Remove(key)
+			}
+			return protocol.NewMultiBulkReply([][]byte{args[i], val})
+		}
+		keys = append(keys, key)
+	}
+
+	kvChan := make(chan *KeyValue)
+
+	go func(d *DB, kvChan chan *KeyValue) {
+		timeTicker := time.Tick(time.Duration(timeout) * time.Second)
+		idx := 0
+		for {
+			select {
+			case <-timeTicker:
+				kvChan <- nil
+				return
+			default:
+				if idx == len(keys) {
+					idx = 0
+				}
+
+				kv := func() *KeyValue {
+					key := keys[idx]
+
+					d.RWLocks([]string{key}, nil)
+					defer d.RWUnLocks([]string{key}, nil)
+
+					l, _ := d.getEntityAsList(key)
+					if l != nil {
+						val := l.RemoveFirst()
+						if l.Length() == 0 {
+							d.Remove(key)
+						}
+						return &KeyValue{key: []byte(key), value: val}
+					}
+					return nil
+
+				}()
+
+				if kv != nil {
+					kvChan <- kv
+					return
+				}
+
+				idx++
+			}
+		}
+
+	}(d, kvChan)
+
+	kv := <-kvChan
+	if kv == nil {
+		return protocol.NullBulkReply
+	} else {
+		return protocol.NewMultiBulkReply([][]byte{kv.key, kv.value})
+	}
 }
 
 // RPopCommand 从列表末尾弹出元素并返回，count指定弹出的数量
@@ -170,7 +259,7 @@ func RPopCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil {
-		return protocol.NullBulkReplyConst
+		return protocol.NullBulkReply
 	}
 	if l.Length() < count {
 		count = l.Length()
@@ -185,6 +274,88 @@ func RPopCommand(d *DB, args [][]byte) redis.Reply {
 	return protocol.NewMultiBulkReply(values)
 }
 
+// BRPopCommand 从第一个非空列表的末尾弹出元素，并返回一个数组，第一个元素是非空的key，第二个是弹出的元素值；如果所有key都不存在，则阻塞该客户端的连接
+// 直到某一个key对应list插入了元素；最后一个参数指定以秒为单位的超时时间，如果是0，则表示不设置超时时间
+// BRPOP key [key ...] timeout
+func BRPopCommand(d *DB, args [][]byte) redis.Reply {
+	timeout, err := parseInt(args[len(args)-1])
+	if err != nil {
+		return protocol.NewErrorReply("ERR timeout is not an integer or out of range")
+	}
+	if timeout < 0 {
+		return protocol.NewErrorReply("ERR timeout is negative")
+	}
+
+	numKeys := len(args) - 1
+	keys := make([]string, 0)
+	for i := 0; i < numKeys; i++ {
+		key := string(args[i])
+		l, errReply := d.getEntityAsList(key)
+		if errReply != nil {
+			return errReply
+		}
+		if l != nil {
+			val := l.RemoveFirst()
+			if l.Length() == 0 {
+				d.Remove(key)
+			}
+			return protocol.NewMultiBulkReply([][]byte{args[i], val})
+		}
+		keys = append(keys, key)
+	}
+
+	kvChan := make(chan *KeyValue)
+
+	go func(d *DB, kvChan chan *KeyValue) {
+		timeTicker := time.Tick(time.Duration(timeout) * time.Second)
+		idx := 0
+		for {
+			select {
+			case <-timeTicker:
+				kvChan <- nil
+				return
+			default:
+				if idx == len(keys) {
+					idx = 0
+				}
+
+				kv := func() *KeyValue {
+					key := keys[idx]
+
+					d.RWLocks([]string{key}, nil)
+					defer d.RWUnLocks([]string{key}, nil)
+
+					l, _ := d.getEntityAsList(key)
+					if l != nil {
+						val := l.RemoveLast()
+						if l.Length() == 0 {
+							d.Remove(key)
+						}
+						return &KeyValue{key: []byte(key), value: val}
+					}
+					return nil
+
+				}()
+
+				if kv != nil {
+					kvChan <- kv
+					return
+				}
+
+				idx++
+			}
+		}
+
+	}(d, kvChan)
+
+	kv := <-kvChan
+	if kv == nil {
+		return protocol.NullBulkReply
+	} else {
+		return protocol.NewMultiBulkReply([][]byte{kv.key, kv.value})
+	}
+}
+
 // LLenCommand 返回list长度
 // LLEN key
 func LLenCommand(d *DB, args [][]byte) redis.Reply {
@@ -195,7 +366,7 @@ func LLenCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil {
-		return protocol.ZeroReplyConst
+		return protocol.ZeroReply
 	}
 
 	return protocol.NewIntReply(int64(l.Length()))
@@ -221,7 +392,7 @@ func LIndexCommand(d *DB, args [][]byte) redis.Reply {
 		index = length + index
 	}
 	if index < 0 || index > length-1 {
-		return protocol.NullBulkReplyConst
+		return protocol.NullBulkReply
 	}
 	return protocol.NewBulkReply(l.Get(index))
 }
@@ -249,27 +420,21 @@ func LRangeCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil || l.Length() == 0 {
-		return protocol.EmptyMultiBulkReplyConst
+		return protocol.EmptyMultiBulkReply
 	}
 	length := l.Length()
 
-	if start < 0 {
-		start = length + start
-		if start < 0 {
-			start = 0
-		}
+	start, err = adjustIndex(l.Length(), start)
+	if err != nil {
+		return protocol.EmptyMultiBulkReply
+	}
+	end, err = adjustIndex(l.Length(), end)
+	if err != nil {
+		end = length - 1
 	}
 
-	if end < 0 {
-		end = length + end
-		if end < 0 {
-			end = 0
-		}
-	}
-
-	end = mathutil.Min(length-1, end)
-	if start > length-1 || start > end {
-		return protocol.EmptyMultiBulkReplyConst
+	if start > end {
+		return protocol.EmptyMultiBulkReply
 	}
 
 	res := make([][]byte, 0)
@@ -305,7 +470,7 @@ func LInsertCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil {
-		return protocol.ZeroReplyConst
+		return protocol.ZeroReply
 	}
 	index := -1
 	l.ForEach(func(idx int, v []byte) bool {
@@ -328,15 +493,279 @@ func LInsertCommand(d *DB, args [][]byte) redis.Reply {
 	return protocol.NewIntReply(int64(l.Length()))
 }
 
+// LRemCommand 从list删除指定count个指定的element，如果count > 0，则从头开始遍历删除；count < 0, 则从末尾开始遍历删除; count = 0,删除全部值等于element的元素
+// LREM key count element
+// 如果key不存在，则视为空列表
+// 返回值为实际删除的元素个数
+func LRemCommand(d *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	count, err := parseInt(args[1])
+	if err != nil {
+		return protocol.ErrorSyntaxReply
+	}
+	element := args[2]
+	l, errReply := d.getEntityAsList(key)
+	if errReply != nil {
+		return errReply
+	}
+	if l == nil || l.Length() == 0 {
+		return protocol.ZeroReply
+	}
+	deletedCount := 0
+	if count == 0 {
+		deletedCount = l.RemoveAllByVal(element)
+	} else if count > 0 {
+		deletedCount = l.RemoveByValFromHead(element, count)
+	} else {
+		deletedCount = l.RemoveByValFromTail(element, -count)
+	}
+	if l.Length() == 0 {
+		d.Remove(key)
+	}
+	return protocol.NewIntReply(int64(deletedCount))
+}
+
+// LSetCommand list指定索引的元素修改为element,修改成功,返回OK
+// LSET key index element
+// 如果索引越界，返回错误
+func LSetCommand(d *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	index, err := parseInt(args[1])
+	if err != nil {
+		return protocol.ErrorSyntaxReply
+	}
+	element := args[2]
+	l, errReply := d.getEntityAsList(key)
+	if errReply != nil {
+		return errReply
+	}
+	if l == nil {
+		return protocol.ErrorIndexOutOfRangeReply
+	}
+
+	if index < 0 {
+		index += l.Length()
+	}
+	if index < 0 || index > l.Length()-1 {
+		return protocol.ErrorIndexOutOfRangeReply
+	}
+	l.Set(index, element)
+	return protocol.OKReply
+}
+
+// LTrimCommand 删除list索引 0 ~ start - 1和 stop + 1 ~ length - 1的元素，只剩下 start ~ stop这个子列表
+// LTRIM key start stop
+// 索引可以为负值，越界不会报错
+// 如果start小于0，则认为是0；如果start 大于length - 1，则认为是空数组，删去该key
+// 如果end大于length - 1，则任务是length - 1
+// 如果 start > end，则认为是空数组，删去该key
+// 设置成功返回OK
+func LTrimCommand(d *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	start, err := parseInt(args[1])
+	if err != nil {
+		return protocol.ErrorSyntaxReply
+	}
+	stop, err := parseInt(args[2])
+	if err != nil {
+		return protocol.ErrorSyntaxReply
+	}
+
+	l, errReply := d.getEntityAsList(key)
+	if errReply != nil {
+		return errReply
+	}
+	if l == nil {
+		return protocol.ErrorNoSuchKeyReply
+	}
+	length := l.Length()
+	start, err = adjustIndex(length, start)
+	if err != nil {
+		d.Remove(key)
+		return protocol.OKReply
+	}
+	stop, err = adjustIndex(length, stop)
+	if err != nil {
+		stop = length - 1
+	}
+	if start > stop {
+		d.Remove(key)
+		return protocol.OKReply
+	}
+
+	for i := 0; i < start; i++ {
+		l.RemoveFirst()
+	}
+	for i := 0; i < length-1-stop; i++ {
+		l.RemoveLast()
+	}
+	return protocol.OKReply
+}
+
+// LMoveCommand 将source的第一个/最后一个 拿出来，放到destination 列表头/尾，返回操作的元素值
+// LMOVE source destination <LEFT | RIGHT> <LEFT | RIGHT>
+// 如果source 不存在，返回nil
+// source和destination可以为同一个key
+func LMoveCommand(d *DB, args [][]byte) redis.Reply {
+	source := string(args[0])
+	dest := string(args[1])
+
+	sourceLoc := strings.ToLower(string(args[2]))
+	destLoc := strings.ToLower(string(args[3]))
+	if sourceLoc != "left" && sourceLoc != "right" {
+		return protocol.ErrorSyntaxReply
+	}
+	if destLoc != "left" && destLoc != "right" {
+		return protocol.ErrorSyntaxReply
+	}
+
+	sourceList, errReply := d.getEntityAsList(source)
+	if errReply != nil {
+		return errReply
+	}
+	var destList list.List
+	if source == dest {
+		destList = sourceList
+	} else {
+		destList, errReply = d.getEntityAsList(dest)
+		if errReply != nil {
+			return errReply
+		}
+	}
+
+	if sourceList == nil {
+		return protocol.NullBulkReply
+	}
+	if destList == nil {
+		destList = list.NewEmptyLinkedList()
+		d.PutEntity(dest, buildListEntity(destList))
+	}
+
+	var val []byte
+	if sourceLoc == "left" {
+		val = sourceList.RemoveFirst()
+	} else {
+		val = sourceList.RemoveLast()
+	}
+
+	if sourceList.Length() == 0 {
+		d.Remove(source)
+	}
+
+	if destLoc == "left" {
+		destList.AddFirst(val)
+	} else {
+		destList.AddLast(val)
+	}
+
+	return protocol.NewBulkReply(val)
+}
+
+// LMPopCommand 根据传递的参数，从第一个非空列表的左侧或者右侧弹出元素，弹出的数量是count(默认为1)和列表长度的较小值
+// LMPOP numkeys key [key ...] <LEFT | RIGHT> [COUNT count]
+// 返回格式为：第一行为非空列表对应的key； 后面是弹出的元素列表
+// 注意：虽然给定了多个key，但是只从第一个遇到的非空列表弹出，后面的key就不再处理
+func LMPopCommand(d *DB, args [][]byte) redis.Reply {
+	numkeys, err := parseInt(args[0])
+	if err != nil {
+		return protocol.ErrorSyntaxReply
+	}
+	if numkeys <= 0 {
+		return protocol.NullBulkReply
+	}
+	if len(args) < 2+numkeys || len(args) > 4+numkeys {
+		return protocol.ErrorSyntaxReply
+	}
+	loc := strings.ToLower(string(args[1+numkeys]))
+	if loc != "left" && loc != "right" {
+		return protocol.ErrorSyntaxReply
+	}
+	count := 0
+	if len(args) == 3+numkeys {
+		count, err = parseInt(args[2+numkeys])
+		if err != nil {
+			return protocol.ErrorSyntaxReply
+		}
+		if count <= 0 {
+			return protocol.NullBulkReply
+		}
+	}
+
+	var l list.List
+	var key string
+	var errReply redis.Reply
+	for i := 1; i < numkeys+1; i++ {
+		l, errReply = d.getEntityAsList(string(args[i]))
+		if errReply != nil {
+			return errReply
+		}
+		if l != nil {
+			key = string(args[i])
+			break
+		}
+	}
+
+	if l == nil {
+		return protocol.NullBulkReply
+	}
+
+	writeKeys := []string{key}
+	d.RWLocks(writeKeys, nil)
+	defer d.RWUnLocks(writeKeys, nil)
+
+	count = mathutil.Min(count, l.Length())
+
+	values := make([][]byte, 0)
+	for i := 0; i < count; i++ {
+		if loc == "left" {
+			values = append(values, l.RemoveFirst())
+		} else {
+			values = append(values, l.RemoveLast())
+		}
+	}
+	if l.Length() == 0 {
+		d.Remove(key)
+	}
+
+	res := protocol.NewArrayReply([]redis.Reply{protocol.NewBulkReply([]byte(key)), protocol.NewMultiBulkReply(values)})
+	return res
+}
+
 func init() {
 	registerNormalCommand("lpush", LPushCommand, writeFirstKey, -2, tagWrite)
 	registerNormalCommand("lpushx", LPushXCommand, writeFirstKey, -2, tagWrite)
 	registerNormalCommand("rpush", RPushCommand, writeFirstKey, -2, tagWrite)
 	registerNormalCommand("rpushx", RPushXCommand, writeFirstKey, -2, tagWrite)
 	registerNormalCommand("lpop", LPopCommand, writeFirstKey, -2, tagWrite)
+	registerNormalCommand("blpop", BLPopCommand, nil, -3, tagWrite)
 	registerNormalCommand("rpop", RPopCommand, writeFirstKey, -2, tagWrite)
+	registerNormalCommand("brpop", BRPopCommand, nil, -3, tagWrite)
 	registerNormalCommand("llen", LLenCommand, readFirstKey, 2, tagRead)
 	registerNormalCommand("lindex", LIndexCommand, readFirstKey, 3, tagRead)
 	registerNormalCommand("lrange", LRangeCommand, readFirstKey, 4, tagRead)
 	registerNormalCommand("linsert", LInsertCommand, writeFirstKey, 5, tagWrite)
+	registerNormalCommand("lrem", LRemCommand, writeFirstKey, 4, tagWrite)
+	registerNormalCommand("lset", LSetCommand, writeFirstKey, 4, tagWrite)
+	registerNormalCommand("ltrim", LTrimCommand, writeFirstKey, 4, tagWrite)
+	registerNormalCommand("lmove", LMoveCommand, prepareLmove, 5, tagWrite)
+	registerNormalCommand("lmpop", LMPopCommand, nil, -2, tagWrite)
+
+	// RPOPLPUSH, BRPOPLPUSH  已废弃
+}
+
+// 根据列表长度，调整索引值，如果是负值，则转为正值
+// 然后判断是否在 0 ~ length - 1 范围内
+// 如果小于0，则置为0
+// 如果大于length - 1，则返回错误
+func adjustIndex(length, index int) (int, error) {
+	if index < 0 {
+		index += length
+	}
+	if index < 0 {
+		return 0, nil
+	}
+	if index >= length {
+		return 0, errors.New("index out of range")
+	}
+	return index, nil
 }

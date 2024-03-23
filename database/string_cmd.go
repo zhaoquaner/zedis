@@ -139,10 +139,10 @@ func SetCommand(d *DB, cmdArgs [][]byte) redis.Reply {
 			d.Persist(key)
 		}
 
-		return protocol.OKReplyConst
+		return protocol.OKReply
 	}
 
-	return protocol.NullBulkReplyConst
+	return protocol.NullBulkReply
 
 }
 
@@ -153,7 +153,7 @@ func GetCommand(d *DB, args [][]byte) redis.Reply {
 		return err
 	}
 	if bytes == nil {
-		return protocol.NullBulkReplyConst
+		return protocol.NullBulkReply
 	}
 	return protocol.NewBulkReply(bytes)
 }
@@ -200,7 +200,7 @@ func MSetCommand(d *DB, args [][]byte) redis.Reply {
 			d.Persist(key)
 		}
 	}
-	return protocol.OKReplyConst
+	return protocol.OKReply
 }
 
 // MSetNXCommand 设置多个key-value键值对，只要有一个key已存在，就不执行任何操作，返回0;如果所有key都不存在，执行操作，返回1
@@ -215,7 +215,7 @@ func MSetNXCommand(d *DB, args [][]byte) redis.Reply {
 		kvMap[string(key)] = val
 		_, ok := d.GetEntity(string(key))
 		if ok {
-			return protocol.ZeroReplyConst
+			return protocol.ZeroReply
 		}
 	}
 	for k, v := range kvMap {
@@ -230,7 +230,7 @@ func MGetCommand(d *DB, args [][]byte) redis.Reply {
 	for _, arg := range args {
 		valueBytes, err := d.getEntityAsString(string(arg))
 		if err != nil || valueBytes == nil {
-			res = append(res, protocol.NullBulkReplyConst)
+			res = append(res, protocol.NullBulkReply)
 		} else {
 			res = append(res, protocol.NewBulkReply(valueBytes))
 		}
@@ -243,7 +243,7 @@ func GetDelCommand(d *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	bytes, err := d.getEntityAsString(key)
 	if err != nil || bytes == nil {
-		return protocol.NullBulkReplyConst
+		return protocol.NullBulkReply
 	}
 
 	d.Remove(key)
@@ -369,7 +369,7 @@ func GetExCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if bytes == nil {
-		return protocol.NullBulkReplyConst
+		return protocol.NullBulkReply
 	}
 
 	if len(args) > 2 {
@@ -465,7 +465,7 @@ func GetRangeCommand(d *DB, args [][]byte) redis.Reply {
 		return protocol.ErrorWrongTypeReply
 	}
 	if bytes == nil {
-		return protocol.ErrorKeyNotExistsReply
+		return protocol.ErrorNoSuchKeyReply
 	}
 	startArg, err := parseInt64(args[1])
 	endArg, err := parseInt64(args[2])
@@ -500,7 +500,7 @@ func GetRangeCommand(d *DB, args [][]byte) redis.Reply {
 		}
 	}
 	if start > end {
-		return protocol.EmptyBulkReplyConst
+		return protocol.EmptyBulkReply
 	}
 	return protocol.NewBulkReply([]byte(strutil.Substring(string(bytes), int(start), uint(end-start+1))))
 }

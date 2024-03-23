@@ -59,3 +59,9 @@ func prepareSMove(args [][]byte) ([]string, []string) {
 	writeKeys := []string{string(args[0]), string(args[1])}
 	return writeKeys, nil
 }
+
+// prepareLmove lmove命令的prepare
+func prepareLmove(args [][]byte) ([]string, []string) {
+	writeKeys := []string{string(args[0]), string(args[1])}
+	return writeKeys, nil
+}

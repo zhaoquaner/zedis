@@ -42,21 +42,21 @@ func (r *pongReply) ToBytes() []byte {
 	return pongBytes
 }
 
-/* ---- Zero Reply ---- */
+/* ---- zero Reply ---- */
 
-type ZeroReply struct{}
+type zeroReply struct{}
 
 var zeroBytes = []byte(":0\r\n")
 
-func (r *ZeroReply) ToBytes() []byte {
+func (r *zeroReply) ToBytes() []byte {
 	return zeroBytes
 }
 
 var (
-	NullBulkReplyConst       = &nullBulkReply{}
-	EmptyBulkReplyConst      = NewBulkReply([]byte(""))
-	OKReplyConst             = &okReply{}
-	PongReplyConst           = &pongReply{}
-	ZeroReplyConst           = &ZeroReply{}
-	EmptyMultiBulkReplyConst = &emptyMultiBulkReply{}
+	NullBulkReply       = &nullBulkReply{}
+	EmptyBulkReply      = NewBulkReply([]byte(""))
+	OKReply             = &okReply{}
+	PongReply           = &pongReply{}
+	ZeroReply           = &zeroReply{}
+	EmptyMultiBulkReply = &emptyMultiBulkReply{}
 )

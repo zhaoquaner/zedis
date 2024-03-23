@@ -126,11 +126,9 @@ func (l *LinkedList) Remove(index int) (val []byte) {
 	if n == nil {
 		return nil
 	}
-	n.prev.next = n.next
-	n.next.prev = n.prev
+	l.removeNode(n)
 	n.next = nil
 	n.prev = nil // for Go garbage collection
-	l.length--
 	return n.val
 }
 
@@ -188,4 +186,60 @@ func (l *LinkedList) Contains(expected Expected) bool {
 		return true
 	})
 	return contain
+}
+
+func (l *LinkedList) RemoveByValFromHead(val []byte, count int) int {
+	deletedCount := 0
+	cur := l.head.next
+	for cur != l.tail && deletedCount < count {
+		nex := cur.next
+		if string(cur.val) == string(val) {
+			l.removeNode(cur)
+			deletedCount++
+		}
+		cur.next = nil
+		cur.prev = nil
+		cur = nex
+	}
+	return deletedCount
+}
+
+func (l *LinkedList) RemoveByValFromTail(val []byte, count int) int {
+	deletedCount := 0
+	cur := l.tail.prev
+	for cur != l.head && deletedCount < count {
+		pre := cur.prev
+		if string(cur.val) == string(val) {
+			l.removeNode(cur)
+			deletedCount++
+		}
+		cur.next = nil
+		cur.prev = nil
+		cur = pre
+	}
+	return deletedCount
+}
+
+func (l *LinkedList) RemoveAllByVal(val []byte) int {
+	deletedCount := 0
+	cur := l.head.next
+	for cur != l.tail {
+		nex := cur.next
+		if string(cur.val) == string(val) {
+			l.removeNode(cur)
+			deletedCount++
+		}
+		cur.next = nil
+		cur.prev = nil
+		cur = nex
+	}
+	return deletedCount
+}
+
+// 删除某个节点，不需要考虑没有prev、next节点，因为至少有head和tail两个节点
+func (l *LinkedList) removeNode(n *node) []byte {
+	n.prev.next = n.next
+	n.next.prev = n.prev
+	l.length--
+	return n.val
 }

@@ -55,7 +55,7 @@ func parseBulkReply(header []byte, reader *bufio.Reader, ch chan<- *Payload) err
 		return nil
 	} else if strLen == -1 {
 		ch <- &Payload{
-			Data: protocol.NullBulkReplyConst,
+			Data: protocol.NullBulkReply,
 		}
 	}
 
@@ -77,7 +77,7 @@ func parseMultiBulkReply(header []byte, reader *bufio.Reader, ch chan<- *Payload
 		return nil
 	} else if nStrs == 0 {
 		ch <- &Payload{
-			Data: protocol.EmptyMultiBulkReplyConst,
+			Data: protocol.EmptyMultiBulkReply,
 		}
 	}
 

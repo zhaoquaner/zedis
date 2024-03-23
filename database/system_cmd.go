@@ -18,7 +18,7 @@ var zedisVersion = "1.0.0"
 // Ping 命令
 func Ping(c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) == 0 {
-		return protocol.PongReplyConst
+		return protocol.PongReply
 	} else if len(args) == 1 {
 		return protocol.NewSingleReply(string(args[0]))
 	}
@@ -38,7 +38,7 @@ func Auth(c redis.Connection, args [][]byte) redis.Reply {
 	if config.Config.RequirePass != passwd {
 		return protocol.NewErrorReply("ERR invalid password")
 	}
-	return protocol.OKReplyConst
+	return protocol.OKReply
 }
 
 func isAuthenticated(c redis.Connection) bool {
