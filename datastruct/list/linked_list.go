@@ -12,11 +12,11 @@ type node struct {
 	next *node
 }
 
-func NewEmptyLinkedList() *LinkedList {
-	return NewLinkedList(nil)
+func newEmptyLinkedList() *LinkedList {
+	return newLinkedList(nil)
 }
 
-func NewLinkedList(values [][]byte) *LinkedList {
+func newLinkedList(values [][]byte) *LinkedList {
 	headNode := &node{
 		val: nil,
 	}

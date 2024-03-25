@@ -2,7 +2,7 @@ Bind: 127.0.0.1
 Port: 8000
 Dir: .
 AnnounceHost: 127.0.0.1
-MaxClients: 1
+MaxClients: 100
 RequirePass:
 Databases: 1
 ReplTimeOut: 10

@@ -2,6 +2,7 @@ package database
 
 import (
 	"time"
+	"zedis/interface/db"
 	"zedis/interface/redis"
 	"zedis/lib/wildcard"
 	"zedis/redis/protocol"
@@ -256,6 +257,29 @@ func PTTLCommand(d *DB, args [][]byte) redis.Reply {
 	return protocol.NewIntReply(expireTime.Sub(time.Now()).Milliseconds())
 }
 
+// TypeCommand 返回key 的类型，如果key不存在，返回null
+// type key
+func TypeCommand(d *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	t := "none"
+	entity, exists := d.GetEntity(key)
+	if exists {
+		switch entity.Type {
+		case db.ListType:
+			t = "list"
+		case db.SetType:
+			t = "set"
+		case db.HashType:
+			t = "hash"
+		case db.SortedType:
+			t = "zset"
+		case db.StringType, db.BitMapType:
+			t = "string"
+		}
+	}
+	return protocol.NewBulkReply([]byte(t))
+}
+
 func init() {
 	registerNormalCommand("exists", ExistsCommand, readAllKeys, -2, tagRead)
 	registerNormalCommand("del", DelCommand, writeAllKeys, -2, tagWrite)
@@ -268,4 +292,5 @@ func init() {
 	registerNormalCommand("pexpiretime", PExpireTimeCommand, readFirstKey, 2, tagRead)
 	registerNormalCommand("ttl", TTLCommand, readFirstKey, 2, tagRead)
 	registerNormalCommand("pttl", PTTLCommand, readFirstKey, 2, tagRead)
+	registerNormalCommand("type", TypeCommand, readFirstKey, 2, tagRead)
 }

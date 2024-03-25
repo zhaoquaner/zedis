@@ -20,6 +20,8 @@ type Connection struct {
 
 	// 密码可能在运行时被配置文件修改，所以存储起来
 	password string
+	// 表示是否超出最大连接数，如果是，则该字段被置为true，无法执行任何命令
+	exceedMaxClients bool
 }
 
 func (c *Connection) Write(bytes []byte) (int, error) {
@@ -52,6 +54,14 @@ func (c *Connection) GetPassword() string {
 	return c.password
 }
 
+func (c *Connection) SetExceedMaxClients(b bool) {
+	c.exceedMaxClients = b
+}
+
+func (c *Connection) CheckExceedMaxClients() bool {
+	return c.exceedMaxClients
+}
+
 func (c *Connection) Name() string {
 	if c.conn != nil {
 		return c.conn.RemoteAddr().String()
@@ -61,7 +71,7 @@ func (c *Connection) Name() string {
 
 var connPool = sync.Pool{
 	New: func() any {
-		return &Connection{}
+		return &Connection{exceedMaxClients: false}
 	},
 }
 
@@ -69,7 +79,7 @@ func NewConnection(conn net.Conn) *Connection {
 	c, ok := connPool.Get().(*Connection)
 	if !ok {
 		logger.Error("connection pool make wrong type")
-		return &Connection{conn: conn}
+		return &Connection{conn: conn, password: "", exceedMaxClients: false}
 	}
 	c.conn = conn
 	return c

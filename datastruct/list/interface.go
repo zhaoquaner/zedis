@@ -25,3 +25,13 @@ type List interface {
 	RemoveByValFromTail(val []byte, count int) int // 从表尾开始，删除count个值为val的元素，返回实际删除的元素个数
 	RemoveAllByVal(val []byte) int                 // 删除列表中所有值为val的元素，返回实际删除的元素个数
 }
+
+// NewList 对外提供的新建list函数
+func NewList(values [][]byte) *LinkedList {
+	return newLinkedList(values)
+}
+
+// NewEmptyList 对外提供的新建list函数
+func NewEmptyList() *LinkedList {
+	return newEmptyLinkedList()
+}

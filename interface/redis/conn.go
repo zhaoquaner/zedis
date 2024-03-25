@@ -8,5 +8,8 @@ type Connection interface {
 	SetPassword(string)
 	GetPassword() string
 
+	SetExceedMaxClients(b bool)
+	CheckExceedMaxClients() bool
+
 	Name() string
 }

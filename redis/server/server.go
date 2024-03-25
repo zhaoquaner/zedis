@@ -8,11 +8,13 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"zedis/config"
 	"zedis/database"
 	"zedis/logger"
 	"zedis/redis/connection"
 	"zedis/redis/parser"
 	"zedis/redis/protocol"
+	"zedis/tcp"
 )
 
 // Handler 实现了tcp.Handle，作为Redis的服务处理器
@@ -51,15 +53,13 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	// 检查是否超出最大客户端数量
-	//if tcp.ClientCounter >= int32(config.Config.MaxClients) {
-	//	_, _ = conn.Write(protocol.NewErrorReply("ERR exceed the max clients").ToBytes())
-	//	_ = conn.Close()
-	//	return
-	//}
-
 	client := connection.NewConnection(conn)
 	h.activeConn.Store(client, struct{}{})
+
+	// 检查是否超出最大客户端数量
+	if tcp.ClientCounter > int32(config.Config.MaxClients) {
+		client.SetExceedMaxClients(true)
+	}
 
 	ch := parser.ParseStream(conn)
 	for payload := range ch {

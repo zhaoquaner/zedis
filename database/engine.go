@@ -34,6 +34,10 @@ func (e *Engine) Exec(c redis.Connection, cmdLine [][]byte) (res redis.Reply) {
 		}
 	}()
 
+	if c.CheckExceedMaxClients() {
+		return protocol.NewErrorReply("ERR max number of clients reached")
+	}
+
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	// 所有命令处理函数，传的都是去掉命令名称的cmdArgs
 	cmdArgs := cmdLine[1:]

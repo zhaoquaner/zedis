@@ -16,4 +16,5 @@ const (
 	HashType
 	SetType
 	SortedType
+	BitMapType
 )

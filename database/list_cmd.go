@@ -11,6 +11,18 @@ import (
 	"zedis/redis/protocol"
 )
 
+// KeyValue 用于阻塞命令 的channel数据传输
+type KeyValue struct {
+	key   []byte
+	value []byte
+}
+
+// KeyValues 用于阻塞命令 的channel数据传输
+type KeyValues struct {
+	key    []byte
+	values [][]byte
+}
+
 func buildListEntity(data list.List) *db.DataEntity {
 	return &db.DataEntity{
 		Data: data,
@@ -40,7 +52,7 @@ func LPushCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil {
-		l = list.NewLinkedList(args[1:])
+		l = list.NewList(args[1:])
 		d.PutEntity(key, buildListEntity(l))
 	} else {
 		for _, arg := range args[1:] {
@@ -81,7 +93,7 @@ func RPushCommand(d *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if l == nil {
-		l = list.NewLinkedList(args[1:])
+		l = list.NewList(args[1:])
 		d.PutEntity(key, buildListEntity(l))
 	} else {
 		for _, arg := range args[1:] {
@@ -147,11 +159,6 @@ func LPopCommand(d *DB, args [][]byte) redis.Reply {
 		d.Remove(key)
 	}
 	return protocol.NewMultiBulkReply(values)
-}
-
-type KeyValue struct {
-	key   []byte
-	value []byte
 }
 
 // BLPopCommand 从第一个非空列表的表头弹出元素，并返回一个数组，第一个元素是非空的key，第二个是弹出的元素值；如果所有key都不存在，则阻塞该客户端的连接
@@ -637,7 +644,7 @@ func LMoveCommand(d *DB, args [][]byte) redis.Reply {
 		return protocol.NullBulkReply
 	}
 	if destList == nil {
-		destList = list.NewEmptyLinkedList()
+		destList = list.NewEmptyList()
 		d.PutEntity(dest, buildListEntity(destList))
 	}
 
@@ -658,6 +665,131 @@ func LMoveCommand(d *DB, args [][]byte) redis.Reply {
 		destList.AddLast(val)
 	}
 
+	return protocol.NewBulkReply(val)
+}
+
+// BLMoveCommand 将source的第一个/最后一个 拿出来，放到destination 列表头/尾，返回操作的元素值
+// BLMOVE source destination <LEFT | RIGHT> <LEFT | RIGHT> timeout
+// 如果source 不存在，返回nil
+// source和destination可以为同一个key
+func BLMoveCommand(d *DB, args [][]byte) redis.Reply {
+	source := string(args[0])
+	dest := string(args[1])
+
+	sourceLoc := strings.ToLower(string(args[2]))
+	destLoc := strings.ToLower(string(args[3]))
+	if (sourceLoc != "left" && sourceLoc != "right") || (destLoc != "left" && destLoc != "right") {
+		return protocol.ErrorSyntaxReply
+	}
+	timeout, err := parseInt(args[4])
+	if err != nil {
+		return protocol.ErrorSyntaxReply
+	}
+	if timeout < 0 {
+		return protocol.NewErrorReply("ERR timeout is negative")
+	}
+
+	d.RWLocks([]string{source, dest}, nil)
+
+	sourceList, errReply := d.getEntityAsList(source)
+	if errReply != nil {
+		return errReply
+	}
+	var destList list.List
+	if source == dest {
+		destList = sourceList
+	} else {
+		destList, errReply = d.getEntityAsList(dest)
+		if errReply != nil {
+			return errReply
+		}
+	}
+
+	if sourceList != nil {
+		if destList == nil {
+			destList = list.NewEmptyList()
+			d.PutEntity(dest, buildListEntity(destList))
+		}
+
+		var val []byte
+		if sourceLoc == "left" {
+			val = sourceList.RemoveFirst()
+		} else {
+			val = sourceList.RemoveLast()
+		}
+
+		if sourceList.Length() == 0 {
+			d.Remove(source)
+		}
+
+		if destLoc == "left" {
+			destList.AddFirst(val)
+		} else {
+			destList.AddLast(val)
+		}
+
+		d.RWUnLocks([]string{source, dest}, nil)
+		return protocol.NewBulkReply(val)
+	} else {
+		d.RWUnLocks([]string{source, dest}, nil)
+	}
+
+	valChan := make(chan []byte)
+	go func(d *DB, valChan chan []byte) {
+		timeTicker := time.Tick(time.Duration(timeout) * time.Second)
+		for {
+			select {
+			case <-timeTicker:
+				valChan <- nil
+				return
+			default:
+				val := func() []byte {
+					d.RWLocks([]string{source}, nil)
+					defer d.RWUnLocks([]string{source}, nil)
+
+					l, _ := d.getEntityAsList(source)
+					if l == nil {
+						return nil
+					}
+
+					var val []byte
+					if sourceLoc == "left" {
+						val = l.RemoveFirst()
+					} else {
+						val = l.RemoveLast()
+					}
+					if l.Length() == 0 {
+						d.Remove(source)
+					}
+					return val
+				}()
+				if val != nil {
+					valChan <- val
+					return
+				}
+
+			}
+		}
+
+	}(d, valChan)
+
+	val := <-valChan
+	if val == nil {
+		return protocol.NullBulkReply
+	}
+
+	d.RWLocks([]string{dest}, nil)
+	defer d.RWUnLocks([]string{dest}, nil)
+
+	if destList == nil {
+		destList = list.NewEmptyList()
+		d.PutEntity(dest, buildListEntity(destList))
+	}
+	if destLoc == "left" {
+		destList.AddFirst(val)
+	} else {
+		destList.AddLast(val)
+	}
 	return protocol.NewBulkReply(val)
 }
 
@@ -731,6 +863,138 @@ func LMPopCommand(d *DB, args [][]byte) redis.Reply {
 	return res
 }
 
+// BLMPopCommand 根据传递的参数，从第一个非空列表的左侧或者右侧弹出元素，弹出的数量是count(默认为1)和列表长度的较小值；如果所有key的list都为空，则阻塞至超时或领一个客户端向其中一个key push元素
+// BLMPOP timeout numkeys key [key ...] <LEFT | RIGHT> [COUNT count]
+// 返回格式为：第一行为非空列表对应的key； 后面是弹出的元素列表
+// 注意：虽然给定了多个key，但是只从第一个遇到的非空列表弹出，后面的key就不再处理
+// 如果timeout超时，则返回null
+func BLMPopCommand(d *DB, args [][]byte) redis.Reply {
+	timeout, err := parseInt(args[0])
+	if err != nil {
+		return protocol.ErrorSyntaxReply
+	}
+	if timeout < 0 {
+		return protocol.NewErrorReply("ERR timeout is negative")
+	}
+	numkeys, err := parseInt(args[1])
+	if err != nil {
+		return protocol.ErrorSyntaxReply
+	}
+	if numkeys <= 0 {
+		return protocol.NullBulkReply
+	}
+	if len(args) < 3+numkeys || len(args) > 5+numkeys {
+		return protocol.ErrorSyntaxReply
+	}
+	loc := strings.ToLower(string(args[2+numkeys]))
+	if loc != "left" && loc != "right" {
+		return protocol.ErrorSyntaxReply
+	}
+	count := 1
+	if len(args) == 5+numkeys {
+		count, err = parseInt(args[4+numkeys])
+		if err != nil {
+			return protocol.ErrorSyntaxReply
+		}
+		if count <= 0 {
+			return protocol.NullBulkReply
+		}
+	}
+
+	var l list.List
+	var key string
+	var errReply redis.Reply
+	keys := make([]string, 0)
+	for i := 2; i < numkeys+2; i++ {
+		l, errReply = d.getEntityAsList(string(args[i]))
+		if errReply != nil {
+			return errReply
+		}
+		if l != nil {
+			key = string(args[i])
+			break
+		}
+		keys = append(keys, string(args[i]))
+	}
+
+	if l != nil {
+		writeKeys := []string{key}
+		d.RWLocks(writeKeys, nil)
+		defer d.RWUnLocks(writeKeys, nil)
+
+		count = mathutil.Min(count, l.Length())
+
+		values := make([][]byte, 0)
+		for i := 0; i < count; i++ {
+			if loc == "left" {
+				values = append(values, l.RemoveFirst())
+			} else {
+				values = append(values, l.RemoveLast())
+			}
+		}
+		if l.Length() == 0 {
+			d.Remove(key)
+		}
+
+		res := protocol.NewArrayReply([]redis.Reply{protocol.NewBulkReply([]byte(key)), protocol.NewMultiBulkReply(values)})
+		return res
+	}
+
+	// 如果所有key都不存在，则开始进行异步、阻塞逻辑
+	kvChan := make(chan *KeyValues)
+	go func(d *DB, kvChan chan *KeyValues) {
+		timeTicker := time.Tick(time.Duration(timeout) * time.Second)
+		idx := 0
+		for {
+			select {
+			case <-timeTicker:
+				kvChan <- nil
+				return
+			default:
+				if idx == len(keys) {
+					idx = 0
+				}
+				kvFunc := func() *KeyValues {
+					key := keys[idx]
+					d.RWLocks([]string{key}, nil)
+					defer d.RWUnLocks([]string{key}, nil)
+
+					l, _ := d.getEntityAsList(key)
+					if l != nil {
+						values := make([][]byte, 0)
+						count := mathutil.Min(count, l.Length())
+						for len(values) < count {
+							if loc == "left" {
+								values = append(values, l.RemoveFirst())
+							} else {
+								values = append(values, l.RemoveLast())
+							}
+						}
+						if l.Length() == 0 {
+							d.Remove(key)
+						}
+						return &KeyValues{key: []byte(key), values: values}
+					}
+					return nil
+				}
+				kv := kvFunc()
+				if kv != nil {
+					kvChan <- kv
+					return
+				}
+				idx++
+
+			}
+		}
+	}(d, kvChan)
+
+	kv := <-kvChan
+	if kv == nil {
+		return protocol.NullBulkReply
+	}
+	return protocol.NewArrayReply([]redis.Reply{protocol.NewBulkReply(kv.key), protocol.NewMultiBulkReply(kv.values)})
+}
+
 func init() {
 	registerNormalCommand("lpush", LPushCommand, writeFirstKey, -2, tagWrite)
 	registerNormalCommand("lpushx", LPushXCommand, writeFirstKey, -2, tagWrite)
@@ -748,9 +1012,12 @@ func init() {
 	registerNormalCommand("lset", LSetCommand, writeFirstKey, 4, tagWrite)
 	registerNormalCommand("ltrim", LTrimCommand, writeFirstKey, 4, tagWrite)
 	registerNormalCommand("lmove", LMoveCommand, prepareLmove, 5, tagWrite)
+	registerNormalCommand("blmove", BLMoveCommand, nil, 6, tagWrite)
 	registerNormalCommand("lmpop", LMPopCommand, nil, -2, tagWrite)
+	registerNormalCommand("blmpop", BLMPopCommand, nil, -5, tagWrite)
 
 	// RPOPLPUSH, BRPOPLPUSH  已废弃
+	// LPOS 有点麻烦，后续实现
 }
 
 // 根据列表长度，调整索引值，如果是负值，则转为正值
