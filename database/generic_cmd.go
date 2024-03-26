@@ -273,7 +273,7 @@ func TypeCommand(d *DB, args [][]byte) redis.Reply {
 			t = "hash"
 		case db.SortedType:
 			t = "zset"
-		case db.StringType, db.BitMapType:
+		case db.StringType:
 			t = "string"
 		}
 	}

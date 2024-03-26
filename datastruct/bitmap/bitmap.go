@@ -1,5 +1,7 @@
 package bitmap
 
+import "github.com/duke-git/lancet/v2/mathutil"
+
 type BitMap []byte
 
 func NewBitMap(data []byte) *BitMap {
@@ -42,6 +44,7 @@ func (b *BitMap) SetBit(offset int64, value bool) {
 	}
 }
 
+// ForEachBit 遍历bit，begin和end是bit索引(begin、end都包括)，范围是[0, len(data) * 8)
 func (b *BitMap) ForEachBit(begin int64, end int64, consumer BitConsumer) {
 	if b == nil {
 		panic("bit map is nil")
@@ -50,17 +53,34 @@ func (b *BitMap) ForEachBit(begin int64, end int64, consumer BitConsumer) {
 		return
 	}
 
-	if end > b.BitSize() {
-		end = b.BitSize()
+	if begin < 0 {
+		if -begin > b.BitSize() {
+			begin = 0
+		} else {
+			begin += b.BitSize()
+		}
 	}
 
-	for i := begin; i < end; i++ {
+	if end < 0 {
+		if -end > b.BitSize() {
+			end = 0
+		} else {
+			end += b.BitSize()
+		}
+	}
+
+	if begin >= b.BitSize() {
+		return
+	}
+	end = mathutil.Min(end, b.BitSize()-1)
+	for i := begin; i <= end; i++ {
 		if !consumer(i, b.GetBit(i)) {
 			break
 		}
 	}
 }
 
+// ForEachByte 遍历byte，begin和end是byte索引(begin、end都包括)，范围是[0, len(data) )
 func (b *BitMap) ForEachByte(begin int64, end int64, consumer ByteConsumer) {
 	if b == nil {
 		panic("bit map is nil")
@@ -68,10 +88,27 @@ func (b *BitMap) ForEachByte(begin int64, end int64, consumer ByteConsumer) {
 	if b.ByteSize() == 0 {
 		return
 	}
-	if end > b.ByteSize() {
-		end = b.ByteSize()
+	if begin < 0 {
+		if -begin > b.ByteSize() {
+			begin = 0
+		} else {
+			begin += b.ByteSize()
+		}
 	}
-	for i := begin; i < end; i++ {
+
+	if end < 0 {
+		if -end > b.ByteSize() {
+			end = 0
+		} else {
+			end += b.ByteSize()
+		}
+	}
+
+	if begin >= b.ByteSize() {
+		return
+	}
+	end = mathutil.Min(end, b.ByteSize()-1)
+	for i := begin; i <= end; i++ {
 		if !consumer(i, (*b)[i]) {
 			break
 		}

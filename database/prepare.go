@@ -65,3 +65,13 @@ func prepareLmove(args [][]byte) ([]string, []string) {
 	writeKeys := []string{string(args[0]), string(args[1])}
 	return writeKeys, nil
 }
+
+// prepareBitOp BITOP命令的prepare
+func prepareBitOp(args [][]byte) ([]string, []string) {
+	writeKeys := []string{string(args[1])}
+	readKeys := make([]string, 0)
+	for i := 2; i < len(args); i++ {
+		readKeys = append(readKeys, string(args[i]))
+	}
+	return writeKeys, readKeys
+}
